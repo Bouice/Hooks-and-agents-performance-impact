@@ -18,13 +18,20 @@ $Model    = (Get-WmiObject Win32_ComputerSystem).Model
 
 # --- 2. FONCTION ETAT AGENTS (Format Pipe-Separated pour split Power BI) ---
 function Get-AgentsStatus {
-    $Agents = @{ "S1"="SentinelAgent"; "UWM"="EmUser"; "FD"="FileDirector"; "FP"="DLPScanner" }
-    $Status = @()
-    foreach ($A in $Agents.Keys) {
-        $State = if (Get-Process $Agents[$A] -ErrorAction SilentlyContinue) { "1" } else { "0" }
-        $Status += "$A:$State"
+    $AgentsMap = @{ "S1"="SentinelAgent"; "UWM"="EmUser"; "FD"="FileDirector"; "FP"="DLPScanner" }
+    $StatusArray = @()
+    
+    foreach ($Entry in $AgentsMap.GetEnumerator()) {
+        $ProcName = $Entry.Value
+        $Abbr     = $Entry.Name
+        
+        $IsRunning = if (Get-Process $ProcName -ErrorAction SilentlyContinue) { "1" } else { "0" }
+        
+        # CORRECTION : On utilise $() pour forcer l'evaluation avant le ":"
+        $StatusArray += "$($Abbr):$($IsRunning)"
     }
-    return $Status -join "|"
+    
+    return $StatusArray -join "|"
 }
 $CurrentStatus = Get-AgentsStatus
 
