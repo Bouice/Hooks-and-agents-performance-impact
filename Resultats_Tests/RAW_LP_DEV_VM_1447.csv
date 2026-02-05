@@ -1,0 +1,2 @@
+﻿"TIMESTAMP";"HOSTNAME";"CPU";"S1";"UWM";"FD";"FP";"Launch_Notepad";"Launch_Edge";"Launch_Firefox";"Launch_Chrome";"Stress_Registre";"Ecriture_10k_Random";"Compression_ZIP";"Stress_SHA512_Intense"
+"2026-02-05 1447";"LP_DEV_VM";"AMD Ryzen 7 5800X 8-Core Processor             ";"OFF";"OFF";"OFF";"OFF";"0,28";"0,14";"0,38";"0,34";"159,47";"37,84";"249,49";"3,67"
