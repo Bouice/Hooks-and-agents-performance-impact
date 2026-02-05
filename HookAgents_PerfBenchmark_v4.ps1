@@ -53,7 +53,7 @@ $Results = @()
 Write-Host "`n--- [1/4] LANCEMENT APPS (COLD START) ---" -ForegroundColor Yellow
 foreach ($AppName in $AppsToBench.Keys) {
     $ExeName = $AppsToBench[$AppName]
-    Stop-Process -Name $ExeName -Force -ErrorAction SilentlyContinue
+    Get-Process $ExeName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
     
     Write-Host " -> Bench : $AppName" -ForegroundColor Cyan
