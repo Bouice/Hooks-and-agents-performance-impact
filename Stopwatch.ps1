@@ -110,7 +110,17 @@ if (Test-Path $WorkPath) { Remove-Item $WorkPath -Recurse -Force }
 New-Item $WorkPath -ItemType Directory | Out-Null
 
 $T_Write = Measure-Command {
-    1..10000 | ForEach-Object { "Stress Data" | Out-File "$WorkPath\f$_.tmp" -Encoding ascii }
+    1..10000 | ForEach-Object {
+        # Génération d'une taille aléatoire entre 1 Ko et 1 Mo
+        $Size = Get-Random -Minimum 1KB -Maximum 1MB
+        $Buffer = New-Object Byte[] $Size
+        
+        # Remplissage avec des données aléatoires pour tromper la compression/déduplication
+        (New-Object System.Random).NextBytes($Buffer)
+        
+        # Écriture binaire (plus rapide et plus "stressante" pour le driver de filtre)
+        [System.IO.File]::WriteAllBytes("$WorkPath\f$_.tmp", $Buffer)
+    }
 }
 $Results += [PSCustomObject]@{ Test="Ecriture_10k_Files"; Sec=[math]::Round($T_Write.TotalSeconds, 2); Base=$Baselines["Ecriture_10k_Files"]; Info="10k Files" }
 
