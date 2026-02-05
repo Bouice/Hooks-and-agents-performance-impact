@@ -1,5 +1,5 @@
 # ==============================================================================
-# DIAGNOSTIC PERF V16 - DOSSIER DE SORTIE ORGANISÉ
+# DIAGNOSTIC PERF V17 - ÉDITION EXPERT (IO RANDOM + STOPWATCH + HEADERS)
 # ==============================================================================
 
 # --- 1. CONFIGURATION DES BASES DE RÉFÉRENCE ---
@@ -7,160 +7,141 @@ $Baselines = @{
     "Launch_Chrome"      = 2.5
     "Launch_Edge"        = 2.0
     "Launch_Firefox"     = 2.5
-    "Launch_Notepad"     = 1.0
+    "Launch_Notepad"     = 0.5
     "Stress_Registre"    = 8.0   
-    "Ecriture_10k_Files" = 15.0  
-    "Compression_ZIP"    = 12.0  
-    "Stress_SHA512"      = 10.0  
+    "Ecriture_10k_Files" = 45.0  # Augmenté car les fichiers sont maintenant plus gros (1Mo)
+    "Compression_ZIP"    = 30.0  
+    "Stress_SHA512"      = 15.0  
 }
 
 # --- 2. CONFIGURATION DES EXÉCUTABLES ---
-$AppsToBench = @{
-    "Chrome"   = "chrome"
-    "Edge"     = "msedge"
-    "Firefox"  = "firefox"
-    "Notepad"  = "notepad"
-}
+$AppsToBench = @{ "Chrome"="chrome"; "Edge"="msedge"; "Firefox"="firefox"; "Notepad"="notepad" }
 
-# --- 3. IDENTITÉ ET CRÉATION DU DOSSIER DE SORTIE ---
+# --- 3. IDENTITÉ ET DOSSIER DE SORTIE ---
 $Hostname  = $env:COMPUTERNAME
 $DateJour  = Get-Date -Format "yyyy-MM-dd"
 $HeurePrec = Get-Date -Format "HHmm"
 $CPU       = (Get-WmiObject Win32_Processor).Name
 
-# Dossier cible sur le bureau : "Audit_HOSTNAME_DATE"
 $TargetFolderName = "Audit_$($Hostname)_$($DateJour)"
 $TargetFolderPath = Join-Path -Path ([Environment]::GetFolderPath("Desktop")) -ChildPath $TargetFolderName
+if (!(Test-Path $TargetFolderPath)) { New-Item -Path $TargetFolderPath -ItemType Directory | Out-Null }
 
-if (!(Test-Path $TargetFolderPath)) {
-    New-Item -Path $TargetFolderPath -ItemType Directory | Out-Null
-    Write-Host "Dossier cree : $TargetFolderName" -ForegroundColor Green
-}
-
-# État des Agents
+# Statut des Agents (Colonnes dédiées dans le CSV)
 $AgentsMap = @{ "S1"="SentinelAgent"; "UWM"="EmUser"; "FD"="FileDirector"; "FP"="DLPScanner" }
-$StatusList = foreach ($A in $AgentsMap.Keys) {
+$AgentStatusObj = @{}
+foreach ($A in $AgentsMap.Keys) {
     $State = if (Get-Process $AgentsMap[$A] -ErrorAction SilentlyContinue) { "ON" } else { "OFF" }
-    "$A=$State"
+    $AgentStatusObj.Add($A, $State)
 }
-$FinalStatus = $StatusList -join " / "
 
 $Results = @()
 
 # --- 4. EXÉCUTION DES TESTS ---
 
-# [A] LANCEMENT APPS (MÉTHODE STOPWATCH PRÉCISE)
+# [A] LANCEMENT APPS (COLD START + STOPWATCH)
 Write-Host "`n--- [1/4] LANCEMENT APPS (COLD START) ---" -ForegroundColor Yellow
 foreach ($AppName in $AppsToBench.Keys) {
     $ExeName = $AppsToBench[$AppName]
-    
-    # 1. Nettoyage complet
     Get-Process $ExeName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Seconds 2
     
-    Write-Host " -> Bench : $AppName" -ForegroundColor Cyan
-    
-    # 2. Démarrage du Chronomètre de précision
+    Write-Host " -> Bench : $AppName..." -NoNewline -ForegroundColor Cyan
     $SW = [System.Diagnostics.Stopwatch]::StartNew()
-    
     try {
         $p = Start-Process $ExeName -PassThru -WindowStyle Minimized -ErrorAction SilentlyContinue
-        
-        # On attend que l'interface soit prête (Signal OS)
         $null = $p.WaitForInputIdle(15000)
-        
-        # ARRÊT DU CHRONO ici pour capturer le ressenti de lancement réel
         $SW.Stop()
-        $LaunchDuration = [math]::Round($SW.Elapsed.TotalSeconds, 2)
-        
-        # 3. Phase de monitoring (On laisse l'EDR travailler pendant 5s sans compter ce temps)
-        Start-Sleep -Seconds 5
+        $val = [math]::Round($SW.Elapsed.TotalSeconds, 2)
+        Write-Host " Terminé en $val sec" -ForegroundColor Green
+        Start-Sleep -Seconds 5 # Monitoring EDR post-lancement (non compté)
         Stop-Process $p -Force -ErrorAction SilentlyContinue
-        
-    } catch {
-        $LaunchDuration = 0
-    }
+    } catch { $val = 0 ; Write-Host " Erreur" -ForegroundColor Red }
     
-    # On enregistre uniquement le temps de lancement pur dans le CSV
-    $Results += [PSCustomObject]@{ 
-        Test = "Launch_$AppName"; 
-        Sec  = $LaunchDuration; 
-        Base = $Baselines["Launch_$AppName"]; 
-        Info = "Cold Start (Stopwatch)" 
-    }
+    $Results += [PSCustomObject]@{ Test="Launch_$AppName"; Sec=$val; Base=$Baselines["Launch_$AppName"]; Info="Cold Start Stopwatch" }
 }
+
 # [B] STRESS REGISTRE
-Write-Host "`n--- [2/4] STRESS REGISTRE ---" -ForegroundColor Yellow
+Write-Host "`n--- [2/4] STRESS REGISTRE (10k itérations) ---" -ForegroundColor Yellow
 $RegPath = "HKCU:\Software\Bench_Perf_Test"
 if (!(Test-Path $RegPath)) { New-Item $RegPath -Force | Out-Null }
-$T_Reg = Measure-Command {
-    1..10000 | ForEach-Object {
-        $null = New-ItemProperty -Path $RegPath -Name "Val_$_" -Value "Friction" -Force
-        $null = Get-ItemProperty -Path $RegPath -Name "Val_$_"
-    }
+
+$SW_Reg = [System.Diagnostics.Stopwatch]::StartNew()
+1..10000 | ForEach-Object {
+    $null = New-ItemProperty -Path $RegPath -Name "Val_$_" -Value "Friction_Test" -Force
+    $null = Get-ItemProperty -Path $RegPath -Name "Val_$_"
 }
-$Results += [PSCustomObject]@{ Test="Stress_Registre"; Sec=[math]::Round($T_Reg.TotalSeconds, 2); Base=$Baselines["Stress_Registre"]; Info="10k Reg Ops" }
+$SW_Reg.Stop()
+$valReg = [math]::Round($SW_Reg.Elapsed.TotalSeconds, 2)
+Write-Host " -> Terminé en $valReg sec" -ForegroundColor Green
+$Results += [PSCustomObject]@{ Test="Stress_Registre"; Sec=$valReg; Base=$Baselines["Stress_Registre"]; Info="10k Reg Ops" }
 Remove-Item $RegPath -Force -Recurse
 
-# [C] I/O & COMPRESSION
-Write-Host "`n--- [3/4] I/O & COMPRESSION ---" -ForegroundColor Yellow
-$WorkPath = "$env:LOCALAPPDATA\Bench_V16"
+# [C] I/O MASSIF ALÉATOIRE & COMPRESSION
+Write-Host "`n--- [3/4] I/O MASSIF (10k fichiers 1Ko-1Mo) ---" -ForegroundColor Yellow
+$WorkPath = "$env:LOCALAPPDATA\Bench_V17"
 $ZipPath  = "$env:LOCALAPPDATA\Bench_Archive.zip"
 if (Test-Path $WorkPath) { Remove-Item $WorkPath -Recurse -Force }
 New-Item $WorkPath -ItemType Directory | Out-Null
 
-$T_Write = Measure-Command {
-    1..10000 | ForEach-Object {
-        # Génération d'une taille aléatoire entre 1 Ko et 1 Mo
-        $Size = Get-Random -Minimum 1KB -Maximum 1MB
-        $Buffer = New-Object Byte[] $Size
-        
-        # Remplissage avec des données aléatoires pour tromper la compression/déduplication
-        (New-Object System.Random).NextBytes($Buffer)
-        
-        # Écriture binaire (plus rapide et plus "stressante" pour le driver de filtre)
-        [System.IO.File]::WriteAllBytes("$WorkPath\f$_.tmp", $Buffer)
-    }
+$SW_IO = [System.Diagnostics.Stopwatch]::StartNew()
+$Rand = New-Object System.Random
+1..10000 | ForEach-Object {
+    $Buffer = New-Object Byte[] ($Rand.Next(1KB, 1MB))
+    $Rand.NextBytes($Buffer)
+    [System.IO.File]::WriteAllBytes("$WorkPath\f$_.tmp", $Buffer)
+    if ($_ % 2000 -eq 0) { Write-Host "    -> $_ fichiers créés..." -ForegroundColor Gray }
 }
-$Results += [PSCustomObject]@{ Test="Ecriture_10k_Files"; Sec=[math]::Round($T_Write.TotalSeconds, 2); Base=$Baselines["Ecriture_10k_Files"]; Info="10k Files" }
+$SW_IO.Stop()
+$valIO = [math]::Round($SW_IO.Elapsed.TotalSeconds, 2)
+Write-Host " -> Écriture terminée en $valIO sec" -ForegroundColor Green
+$Results += [PSCustomObject]@{ Test="Ecriture_10k_Random"; Sec=$valIO; Base=$Baselines["Ecriture_10k_Files"]; Info="10k Files (Max 1MB)" }
 
-$T_Zip = Measure-Command {
-    Compress-Archive -Path "$WorkPath\*" -DestinationPath $ZipPath -Force
-}
-$Results += [PSCustomObject]@{ Test="Compression_ZIP"; Sec=[math]::Round($T_Zip.TotalSeconds, 2); Base=$Baselines["Compression_ZIP"]; Info="ZIP 10k files" }
+Write-Host " -> Compression ZIP en cours..." -ForegroundColor Cyan
+$SW_Zip = [System.Diagnostics.Stopwatch]::StartNew()
+Compress-Archive -Path "$WorkPath\*" -DestinationPath $ZipPath -Force
+$SW_Zip.Stop()
+$valZip = [math]::Round($SW_Zip.Elapsed.TotalSeconds, 2)
+Write-Host " -> Terminé en $valZip sec" -ForegroundColor Green
+$Results += [PSCustomObject]@{ Test="Compression_ZIP"; Sec=$valZip; Base=$Baselines["Compression_ZIP"]; Info="Archivage 10k files" }
 
 # [D] CALCUL SHA512
-Write-Host "`n--- [4/4] STRESS HASH ---" -ForegroundColor Yellow
-$T_Hash = Measure-Command {
-    Get-ChildItem $WorkPath | Select-Object -First 500 | ForEach-Object {
-        Get-FileHash $_.FullName -Algorithm SHA512 | Out-Null
-    }
+Write-Host "`n--- [4/4] STRESS HASH SHA512 (500 fichiers) ---" -ForegroundColor Yellow
+$SW_Hash = [System.Diagnostics.Stopwatch]::StartNew()
+Get-ChildItem $WorkPath | Select-Object -First 500 | ForEach-Object {
+    Get-FileHash $_.FullName -Algorithm SHA512 | Out-Null
 }
-$Results += [PSCustomObject]@{ Test="Stress_SHA512"; Sec=[math]::Round($T_Hash.TotalSeconds, 2); Base=$Baselines["Stress_SHA512"]; Info="Hash SHA512" }
+$SW_Hash.Stop()
+$valHash = [math]::Round($SW_Hash.Elapsed.TotalSeconds, 2)
+Write-Host " -> Terminé en $valHash sec" -ForegroundColor Green
+$Results += [PSCustomObject]@{ Test="Stress_SHA512"; Sec=$valHash; Base=$Baselines["Stress_SHA512"]; Info="Hash CPU Intensif" }
 
-# NETTOYAGE
+# Nettoyage
 Remove-Item $WorkPath -Recurse -Force -ErrorAction SilentlyContinue
 if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force -ErrorAction SilentlyContinue }
 
-# --- 5. COMPILATION ET EXPORT ---
+# --- 5. EXPORT CSV AVEC HEADERS DÉTAILLÉS ---
 $FinalReport = foreach ($R in $Results) {
     $Ratio = if ($R.Base -gt 0) { [math]::Round($R.Sec / $R.Base, 1) } else { 0 }
     [PSCustomObject]@{
-        Date           = "$DateJour $HeurePrec"
-        Machine        = $Hostname
-        CPU            = $CPU
-        Test           = $R.Test
-        Resultat_Sec   = $R.Sec
-        Baseline_Sec   = $R.Base
-        Ratio_Friction = "x$Ratio"
-        Agents_State   = $FinalStatus
+        "TIMESTAMP"      = "$DateJour $HeurePrec"
+        "HOSTNAME"       = $Hostname
+        "CPU_MODEL"      = $CPU
+        "TEST_NAME"      = $R.Test
+        "DURATION_SEC"   = $R.Sec
+        "BASELINE_SEC"   = $R.Base
+        "FRICTION_RATIO" = "x$Ratio"
+        "S1_STATUS"      = $AgentStatusObj["S1"]
+        "UWM_STATUS"     = $AgentStatusObj["UWM"]
+        "FD_STATUS"      = $AgentStatusObj["FD"]
+        "FP_STATUS"      = $AgentStatusObj["FP"]
+        "TEST_INFO"      = $R.Info
     }
 }
 
-$FileName = "Audit_$($Hostname)_$($HeurePrec).csv"
+$FileName = "Audit_V17_$($Hostname)_$($HeurePrec).csv"
 $FilePath = Join-Path -Path $TargetFolderPath -ChildPath $FileName
-
-$FinalReport | Format-Table -AutoSize
 $FinalReport | Export-Csv -Path $FilePath -NoTypeInformation -Delimiter ";" -Encoding UTF8
 
-Write-Host "`nRapport genere : $FilePath" -ForegroundColor Green
+Write-Host "`n[FIN] Rapport complet généré dans : $FilePath" -ForegroundColor Green
+$FinalReport | Format-Table -AutoSize
