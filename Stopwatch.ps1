@@ -3,15 +3,16 @@
 # ==============================================================================
 
 # --- 1. CONFIGURATION DES BASES DE REFERENCE ---
+# Les mesures sont prises sur le resultat de la machine LP_DEV_W11 qui sert de reference pour calculer l'indice de friction
 $Baselines = @{
-    "Launch_Chrome"      = 2.5
-    "Launch_Edge"        = 2.0
-    "Launch_Firefox"     = 2.5
-    "Launch_Notepad"     = 0.5
-    "Stress_Registre"    = 8.0   
-    "Ecriture_10k_Files" = 45.0  
-    "Compression_ZIP"    = 30.0  
-    "Stress_SHA512"      = 60.0 # Baseline augmentee pour 2000 fichiers
+    "Launch_Chrome"      = 0.34
+    "Launch_Edge"        = 0.14
+    "Launch_Firefox"     = 0.38
+    "Launch_Notepad"     = 0.28
+    "Stress_Registre"    = 159.47   
+    "Ecriture_10k_Files" = 37.84  
+    "Compression_ZIP"    = 250  
+    "Stress_SHA512"      = 3.67
 }
 
 # --- 2. CONFIGURATION DES EXECUTABLES ---
@@ -28,7 +29,7 @@ $TargetFolderPath = Join-Path -Path ([Environment]::GetFolderPath("Desktop")) -C
 if (!(Test-Path $TargetFolderPath)) { New-Item -Path $TargetFolderPath -ItemType Directory | Out-Null }
 
 # Statut des Agents
-$AgentsMap = @{ "S1"="SentinelAgent"; "UWM"="EmUser"; "FD"="FileDirector"; "FP"="DLPScanner" }
+$AgentsMap = @{ "S1"="SentinelAgent"; "UWM"="EmUser"; "AppControl"="AMAgent";"FD"="DataNow_Service"; "DLP"="fppsvc" }
 $AgentStatusObj = @{}
 foreach ($A in $AgentsMap.Keys) {
     $State = if (Get-Process $AgentsMap[$A] -ErrorAction SilentlyContinue) { "ON" } else { "OFF" }
@@ -133,6 +134,7 @@ $ReportLong = foreach ($R in $Results) {
         "FRICTION_RATIO" = "x$Ratio"
         "S1_STATUS"      = $AgentStatusObj["S1"]
         "UWM_STATUS"     = $AgentStatusObj["UWM"]
+		"APPCONTROL_STATUS" = $AgentStatusObj["AppControl"]	
         "FD_STATUS"      = $AgentStatusObj["FD"]
         "FP_STATUS"      = $AgentStatusObj["FP"]
     }
@@ -146,8 +148,9 @@ $RawData = [ordered]@{
     "CPU"       = $CPU
     "S1"        = $AgentStatusObj["S1"]
     "UWM"       = $AgentStatusObj["UWM"]
+	"APPCONTROL"= $AgentStatusObj["AppControl"]	
     "FD"        = $AgentStatusObj["FD"]
-    "FP"        = $AgentStatusObj["FP"]
+    "DLP"        = $AgentStatusObj["DLP"]
 }
 foreach ($R in $Results) { $RawData.Add($R.Test, $R.Sec) }
 [PSCustomObject]$RawData | Export-Csv -Path (Join-Path $TargetFolderPath "RAW_$($Hostname)_$($HeurePrec).csv") -NoTypeInformation -Delimiter ";" -Encoding UTF8
