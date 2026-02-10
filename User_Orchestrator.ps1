@@ -1,8 +1,8 @@
 # ==============================================================================
-# LANCEUR USER - EXÉCUTION DU BENCHMARK V18.2
+# LANCEUR USER - EXeCUTION DU BENCHMARK V18.2
 # ==============================================================================
-$SignalFile = Join-Path $env:TEMP "bench_signal.txt"
-$BenchmarkScript = ".\Benchmark_PDT_V18_2.ps1" # Ton fichier intact
+$SignalFile = "C:/Applications/bench_signal.txt"
+$BenchmarkScript = ".\ReturnTrue.ps1"
 
 # --- BLOC ANTI-VERROUILLAGE ---
 $KeepAliveScript = {
@@ -13,30 +13,33 @@ $KeepAliveScript = {
     }
 }
 $KeepAliveJob = Start-Job -ScriptBlock $KeepAliveScript
+#--------------------------------
 
-Write-Host "[!] Anti-verrouillage activé (Job ID: $($KeepAliveJob.Id))" -ForegroundColor Magenta
-Write-Host "Démarrage de la séquence de tests..." -ForegroundColor Green
+Write-Host "[!] Anti-verrouillage actif (Job ID: $($KeepAliveJob.Id))" -ForegroundColor Yellow
+Write-Host "Demarrage de la sequence de tests..." -ForegroundColor Green
 
-# On boucle 5 fois (pour les 5 états définis côté Admin)
-for ($i=1; $i -le 5; $i++) {
-    Write-Host "`n--- Attente du signal Admin pour le Run $i ---" -ForegroundColor Cyan
-    
-    # 1. Attente que l'Admin dise "READY"
-    while (!(Test-Path $SignalFile)) { Start-Sleep -Seconds 1 }
-    
-    # 2. Exécution du benchmark réel
-    Write-Host "Signal reçu. Lancement du benchmark..." -ForegroundColor Yellow
-    & $BenchmarkScript
-    
-    # 3. On supprime le signal pour dire à l'Admin de passer à la suite
-    Remove-Item $SignalFile -ErrorAction SilentlyContinue
-    Write-Host "Run $i terminé. Signal envoyé à l'Admin." -ForegroundColor Green
-}
-
-Write-Host "`n[FIN] Tous les tests sont terminés." -ForegroundColor Magenta  
-
-
+try {
+    # On boucle 6 fois (pour les 6 etats definis côte Admin)
+    for ($i=1; $i -le 6; $i++) {
+        Write-Host "`n--- Attente du signal Admin pour le Run $i ---" -ForegroundColor Cyan
+        
+        # 1. Attente que l'Admin dise "READY"
+        while (!(Test-Path $SignalFile)) { Start-Sleep -Seconds 1 }
+        
+        # 2. Execution du benchmark reel
+        Write-Host "Signal recu. Lancement du benchmark..." -ForegroundColor Yellow
+        & $BenchmarkScript
+        
+        # 3. On supprime le signal pour dire a l'Admin de passer a la suite
+        Remove-Item $SignalFile -ErrorAction SilentlyContinue
+        Write-Host "Run $i termine. Signal envoye a l'Admin." -ForegroundColor Green
+    }
+} finally {
 # --- ARRET DU KEEP-ALIVE ---
     Stop-Job $KeepAliveJob
     Remove-Job $KeepAliveJob
-    Write-Host "`n[!] Anti-verrouillage désactivé." -ForegroundColor Magenta
+    Write-Host "`n[!] Anti-verrouillage desactive." -ForegroundColor Yellow
+
+}
+
+Write-Host "`n[FIN] Tous les tests sont termines." -ForegroundColor Magenta
