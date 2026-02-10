@@ -2,25 +2,13 @@
 # DIAGNOSTIC PERF V18.1 - EXPORT RAW UNIQUE & APPEND JOURNALIER
 # ==============================================================================
 
-# --- 1. CONFIGURATION DES BASES DE REFERENCE ---
-$Baselines = @{
-    "Launch_Chrome"      = 0.34
-    "Launch_Edge"        = 0.14
-    "Launch_Firefox"     = 0.38
-    "Launch_Notepad"     = 0.28
-    "Stress_Registre"    = 159.47   
-    "Ecriture_10k_Files" = 37.84  
-    "Compression_ZIP"    = 250  
-    "Stress_SHA512"      = 3.67
-}
-
-# --- 2. CONFIGURATION DES EXECUTABLES ---
+# --- 1. CONFIGURATION DES EXECUTABLES ---
 $AppsToBench = @{ "Chrome"="chrome"; "Edge"="msedge"; "Firefox"="firefox"; "Notepad"="notepad" }
 
-# --- 3. IDENTITE ET FICHIER DE SORTIE ---
+# --- 2. IDENTITE ET FICHIER DE SORTIE ---
 $Hostname  = $env:COMPUTERNAME
 $DateJour  = Get-Date -Format "yyyy-MM-dd"
-$HeurePrec = Get-Date -Format "HH:mm:ss"
+$HeurePrec = Get-Date -Format "HHmm"
 $CPU       = (Get-WmiObject Win32_Processor).Name
 
 # Dossier sur le bureau
@@ -32,16 +20,16 @@ if (!(Test-Path $TargetFolderPath)) { New-Item -Path $TargetFolderPath -ItemType
 $CsvPath = Join-Path $TargetFolderPath "Benchmark_RAW_$($Hostname)_$($DateJour).csv"
 
 # Statut des Agents
-$AgentsMap = @{ "S1"="SentinelAgent"; "UWM"="EmUser"; "AppCo"="AMAgent"; "FD"="DataNow_Service"; "DLP"="fppsvc" }
+$AgentsMap = @{ "S1"="SentinelAgent"; "UWM"="AppSense EmCoreService"; "AppCo"="AppSense Application Manager Agent"; "FD"="DataNow_Service"; "DLP"="fppsvc" }
 $AgentStatusObj = @{}
 foreach ($A in $AgentsMap.Keys) {
-    $State = if (Get-Process $AgentsMap[$A] -ErrorAction SilentlyContinue) { "ON" } else { "OFF" }
+    $State = if (Get-Service -Name $AgentsMap[$A] -ErrorAction SilentlyContinue) { "ON" } else { "OFF" }
     $AgentStatusObj.Add($A, $State)
 }
 
 $Results = @()
 
-# --- 4. EXECUTION DES TESTS ---
+# --- 3. EXECUTION DES TESTS ---
 
 # [A] LANCEMENT APPS
 Write-Host "`n--- [1/4] LANCEMENT APPS ---" -ForegroundColor Yellow
@@ -59,7 +47,7 @@ foreach ($AppName in $AppsToBench.Keys) {
         $val = [math]::Round($SW.Elapsed.TotalSeconds, 2)
         Write-Host " Termine en $val sec" -ForegroundColor Green
         Start-Sleep -Seconds 5 
-        Stop-Process $p -Force -ErrorAction SilentlyContinue
+        Stop-Process -Name $ExeName -Force -ErrorAction SilentlyContinue
     } catch { $val = 0 ; Write-Host " Erreur" -ForegroundColor Red }
     
     $Results += [PSCustomObject]@{ Test="Launch_$AppName"; Sec=$val }
@@ -122,7 +110,7 @@ $Results += [PSCustomObject]@{ Test="Stress_SHA512_Intense"; Sec=$valHash }
 Remove-Item $WorkPath -Recurse -Force -ErrorAction SilentlyContinue
 if (Test-Path $ZipPath) { Remove-Item $ZipPath -Force -ErrorAction SilentlyContinue }
 
-# --- 5. EXPORT RAW UNIQUE (APPEND) ---
+# --- 4. EXPORT RAW UNIQUE (APPEND) ---
 
 $RawData = [ordered]@{
     "TIMESTAMP" = "$DateJour $HeurePrec"
