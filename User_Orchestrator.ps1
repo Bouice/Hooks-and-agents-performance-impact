@@ -4,6 +4,17 @@
 $SignalFile = Join-Path $env:TEMP "bench_signal.txt"
 $BenchmarkScript = ".\Benchmark_PDT_V18_2.ps1" # Ton fichier intact
 
+# --- BLOC ANTI-VERROUILLAGE ---
+$KeepAliveScript = {
+    $wsh = New-Object -ComObject WScript.Shell
+    while($true) {
+        $wsh.SendKeys('{F15}') # Touche virtuelle inoffensive
+        Start-Sleep -Seconds 50 # Doit être inférieur au timeout GPO
+    }
+}
+$KeepAliveJob = Start-Job -ScriptBlock $KeepAliveScript
+
+Write-Host "[!] Anti-verrouillage activé (Job ID: $($KeepAliveJob.Id))" -ForegroundColor Magenta
 Write-Host "Démarrage de la séquence de tests..." -ForegroundColor Green
 
 # On boucle 5 fois (pour les 5 états définis côté Admin)
@@ -22,4 +33,10 @@ for ($i=1; $i -le 5; $i++) {
     Write-Host "Run $i terminé. Signal envoyé à l'Admin." -ForegroundColor Green
 }
 
-Write-Host "`n[FIN] Tous les tests sont terminés." -ForegroundColor Magenta
+Write-Host "`n[FIN] Tous les tests sont terminés." -ForegroundColor Magenta  
+
+
+# --- ARRET DU KEEP-ALIVE ---
+    Stop-Job $KeepAliveJob
+    Remove-Job $KeepAliveJob
+    Write-Host "`n[!] Anti-verrouillage désactivé." -ForegroundColor Magenta
