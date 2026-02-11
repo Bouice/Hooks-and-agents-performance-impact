@@ -8,7 +8,7 @@ $AppsToBench = @{ "Chrome"="chrome"; "Edge"="msedge"; "Firefox"="firefox"; "Note
 # --- 2. IDENTITE ET FICHIER DE SORTIE ---
 $Hostname  = $env:COMPUTERNAME
 $DateJour  = Get-Date -Format "yyyy-MM-dd"
-$HeurePrec = Get-Date -Format "HHmm"
+$HeurePrec = Get-Date -Format "HH:mm"
 $CPU       = (Get-WmiObject Win32_Processor).Name
 
 # Dossier sur le bureau
@@ -23,7 +23,7 @@ $CsvPath = Join-Path $TargetFolderPath "Benchmark_RAW_$($Hostname)_$($DateJour).
 $AgentsMap = @{ "S1"="SentinelAgent"; "UWM"="AppSense EmCoreService"; "AppCo"="AppSense Application Manager Agent"; "FD"="DataNow_Service"; "DLP"="fppsvc" }
 $AgentStatusObj = @{}
 foreach ($A in $AgentsMap.Keys) {
-    $State = if (Get-Service -Name $AgentsMap[$A] -ErrorAction SilentlyContinue) { "ON" } else { "OFF" }
+    $State = if (Get-Service -Name $AgentsMap[$A] | Where-Object {$_.Status -eq "Running"}) { "ON" } else { "OFF" }
     $AgentStatusObj.Add($A, $State)
 }
 
